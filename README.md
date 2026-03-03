@@ -4,8 +4,10 @@ Google Apps Script (GAS) による通知エンジン。
 
 業務ロジックと分離された通知基盤として設計されており、
 現在は **LINE通知に対応** しています。
+Google Chat（Incoming Webhook）にも対応していますが、
+Google Workspace 環境が必要です。
 
-将来的な Slack / Google Chat などへの拡張を想定した構造になっています。
+将来的な Slack などへの拡張を想定した構造になっています。
 
 ---
 
@@ -30,8 +32,8 @@ Google Apps Script (GAS) による通知エンジン。
 | Channel     | Status        |
 | ----------- | ------------- |
 | LINE        | ✅ Implemented |
+| Google Chat | ⚠ Workspace Required |
 | Slack       | ⬜ Planned     |
-| Google Chat | ⬜ Planned     |
 
 ---
 
@@ -184,6 +186,7 @@ Sheet name: `retry`
 Apps Script → プロジェクト設定 → Script Properties に登録：
 
 * `LINE_TOKEN`
+* `GOOGLE_CHAT_WEBHOOK`（Google Workspace 必須）
 
 ※ 認証情報はコードに直接記載しません。
 
@@ -226,7 +229,6 @@ delay = baseDelayMinutes * 2^retryCount
 ## Future Extension
 
 * SlackChannel 実装
-* Google Chat 対応
 * Logger 抽象化
 * FAILED アーカイブ処理
 
