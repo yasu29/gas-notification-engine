@@ -1,137 +1,115 @@
 # gas-notification-engine
 
-Google Apps Script (GAS) による通知エンジン。
+Google Apps Script (GAS) による拡張可能な通知基盤エンジン。
 
-業務ロジックと分離された通知基盤として設計されており、
-現在は **LINE通知に対応** しています。
-Google Chat（Incoming Webhook）にも対応していますが、
-Google Workspace 環境が必要です。
+業務ロジックと完全に分離された通知基盤として設計されています。
 
-将来的な Slack などへの拡張を想定した構造になっています。
+現在対応チャネル：
 
----
+- LINE Messaging API
+- Google Chat（Incoming Webhook）
+- Slack（将来拡張予定）
+
+本リポジトリは通知エンジンのみを提供します。
+
+***
 
 ## Overview
 
-`gas-notification-engine` は以下を特徴とします。
+gas-notification-engine は以下を特徴とします。
 
-* LINE通知実装済み
-* チャネル抽象化（他チャネル追加可能）
-* リトライ制御（指数バックオフ）
-* 状態管理（PENDING / PROCESSING / FAILED）
-* 永続化分離（RetryRepository）
-* 排他制御（LockService）
-* 依存性分離（DI設計）
+- チャネル抽象化設計
+- NotificationGateway による単一エントリポイント
+- リトライ制御（指数バックオフ）
+- 状態管理（PENDING / PROCESSING / FAILED）
+- 永続化分離（RetryRepository）
+- 排他制御（LockService）
+- ScriptProperties による環境依存値管理
 
-業務処理からは `NotificationService.send()` を呼び出すだけで利用できます。
+業務処理側からは notifyText() を呼び出すだけで利用可能です。
 
----
+***
 
 ## Supported Channel
 
-| Channel     | Status        |
-| ----------- | ------------- |
-| LINE        | ✅ Implemented |
-| Google Chat | ⚠ Workspace Required |
-| Slack       | ⬜ Planned     |
+| Channel      | Status |
+|--------------|--------|
+| LINE         | Implemented |
+| Google Chat  | Implemented |
+| Slack        | Planned |
 
----
+***
 
 ## Project Structure
 
 ```
+
 /src
-  config.gs
-  logger.gs
-  message.gs
-  channel.gs
-  lineChannel.gs
-  channelFactory.gs
-  notificationService.gs
-  retryRepository.gs
-  retryJob.gs
-  starterExample.gs
-  googleChatChannel.gs
+core_config.js
+core_logger.js
+core_message.js
+core_channel.js
+core_lineChannel.js
+core_googleChatChannel.js
+core_channelFactory.js
+core_notificationGateway.js
+core_notificationService.js
+core_retryRepository.js
+core_retryJob.gs
+starterExample.js
+
 ```
 
----
+***
 
 ## File Responsibilities
 
-| File                   | Responsibility              |
-| ---------------------- | --------------------------- |
-| config.gs              | ScriptProperties から設定値を取得   |
-| logger.gs              | ログ出力管理（INFO / WARN / ERROR） |
-| message.gs             | 通知1件の状態管理とリトライ制御            |
-| channel.gs             | 通知チャネルの抽象定義                 |
-| lineChannel.gs         | LINE Messaging API 送信実装     |
-| channelFactory.gs      | チャネル生成処理                    |
-| notificationService.gs | 通知制御の司令塔                    |
-| retryRepository.gs     | 再送対象の永続化管理                  |
-| retryJob.gs            | 再送トリガー処理                    |
-| starterExample.gs      | 利用サンプル（必須構成ではない）        |
-| googleChatChannel.gs   | Google Chat Webhook送信実装         |
+| File                         | Responsibility |
+|------------------------------|---------------|
+| core_config.js              | ScriptProperties取得 |
+| core_logger.js              | ログ管理 |
+| core_message.js             | 通知モデル・状態管理 |
+| core_channel.js             | 通知チャネル抽象 |
+| core_lineChannel.js         | LINE送信実装 |
+| core_googleChatChannel.js   | Google Chat送信実装 |
+| core_channelFactory.js      | チャネル生成 |
+| core_notificationGateway.js | 外部公開API |
+| core_notificationService.js | 通知制御 |
+| core_retryRepository.js     | 再送永続化 |
+| core_retryJob.gs            | 再送実行 |
+| starterExample.js           | 利用サンプル |
 
----
+***
 
 ## Architecture
 
 ```
+
 Business Job
-    ↓
+↓
+NotificationGateway (notifyText)
+↓
 NotificationService
-    ↓
+↓
 ChannelFactory
-    ↓
+↓
 Channel (abstract)
-    ↓
-LineChannel (implementation)
-```
+↓
+ConcreteChannel (LINE / GoogleChat)
 
----
+````
 
-## Channel Abstraction（具体例）
+***
 
-通知処理は「Channel」という抽象クラスを通して実行されます。
+## Gateway Usage
 
-現在は `LineChannel` が実装されています。
-
-### 1. 抽象定義（channel.gs）
+外部からは notifyText() のみ使用します。
 
 ```javascript
-class Channel {
-  send(message) {
-    throw new Error("send() must be implemented by subclass");
-  }
-}
-```
+notifyText("LINE", Config.LINE_USER_ID, "Hello");
+````
 
-### 2. LINE実装（lineChannel.gs）
-
-```javascript
-class LineChannel extends Channel {
-  send(message) {
-    // LINE Messaging API 呼び出し処理
-  }
-}
-```
-
-### 3. Factory登録（channelFactory.gs）
-
-```javascript
-const CHANNEL_MAP = {
-  LINE: LineChannel
-};
-```
-
-この構造により、新しい通知手段を追加する場合は：
-
-1. Channel を継承したクラスを作成
-2. ChannelFactory に登録
-
-するだけで拡張できます。
-
-既存の `NotificationService` は変更不要です。
+通知基盤内部には直接触れません。
 
 ---
 
@@ -159,84 +137,71 @@ retryPending()
 | ---------- | ----------- |
 | PENDING    | 再送待ち        |
 | PROCESSING | 実行中         |
-| FAILED     | リトライ上限到達    |
+| FAILED     | 上限到達        |
 
 ---
 
 ## Spreadsheet Structure
 
-Sheet name: `retry`
+Sheet name: retry
 
-| Column           | Description       |
-| ---------------- | ----------------- |
-| id               | UUID              |
-| channelType      | 通知チャネル種別（例: LINE） |
-| to               | 宛先                |
-| body             | メッセージ本文           |
-| retryCount       | 現在のリトライ回数         |
-| maxRetry         | 最大リトライ回数          |
-| baseDelayMinutes | 基本遅延時間            |
-| nextRunAt        | 次回実行時刻            |
-| status           | 現在の状態             |
+| Column           | Description |
+| ---------------- | ----------- |
+| id               | UUID        |
+| channelType      | 通知種別        |
+| to               | 宛先          |
+| body             | 本文          |
+| retryCount       | 現在回数        |
+| maxRetry         | 最大回数        |
+| baseDelayMinutes | 基本遅延        |
+| nextRunAt        | 次回実行        |
+| status           | 状態          |
 
 ---
 
 ## Setup
 
-### 1. Script Properties
+### Script Properties
 
 Apps Script → プロジェクト設定 → Script Properties に登録：
 
-* `LINE_TOKEN`
-* `GOOGLE_CHAT_WEBHOOK`（Google Workspace 必須）
-* `RETRY_SHEET_ID`
+必須：
 
-任意設定（未設定時はデフォルト値使用）：
+* LINE_TOKEN
+* LINE_USER_ID
+* GOOGLE_CHAT_WEBHOOK
+* RETRY_SHEET_ID
 
-* `LOG_LEVEL`（DEBUG / INFO / WARN / ERROR）※ デフォルト: INFO
-* `RETRY_DEFAULT_MAX`（最大リトライ回数）※ デフォルト: 3
-* `RETRY_DEFAULT_BASE_DELAY`（基本遅延時間 分）※ デフォルト: 5
+任意：
+
+* LOG_LEVEL（DEBUG / INFO / WARN / ERROR）
+* RETRY_DEFAULT_MAX（既定3）
+* RETRY_DEFAULT_BASE_DELAY（既定5分）
 
 例：
+
 ```
 LOG_LEVEL=DEBUG
 RETRY_DEFAULT_MAX=5
 RETRY_DEFAULT_BASE_DELAY=10
 ```
 
-※ 認証情報はコードに直接記載しません。
+認証情報はコードに直接記載しません。
 
 ---
 
-### 3. 初回通知（サンプル）
+## Trigger
 
-`starterExample.gs` は利用方法を示すためのサンプルコードです。
-
-本エンジンの必須構成要素ではありません。
-
-実務では業務処理から `NotificationService.send()` を呼び出します。
-
-### 2. Trigger
-
-* 業務通知 → 任意の業務関数を登録
-* retryPending → 5分毎などで登録
+| Function     | Purpose    |
+| ------------ | ---------- |
+| 業務関数         | 通常通知       |
+| retryPending | 再送処理（定期実行） |
 
 ---
 
-## Design Philosophy
+## Retry Strategy
 
-### Responsibility Separation
-
-* NotificationService → 制御
-* Channel → 送信
-* Repository → 永続化
-* Message → 状態管理
-
----
-
-### Retry Strategy
-
-指数バックオフを採用：
+指数バックオフ：
 
 ```
 delay = baseDelayMinutes * 2^retryCount
@@ -244,24 +209,36 @@ delay = baseDelayMinutes * 2^retryCount
 
 ---
 
-### Concurrency Control
+## Concurrency Control
 
-`LockService` により同時実行を防止。
+LockService により同時実行を防止。
+
+---
+
+## Design Philosophy
+
+### Responsibility Separation
+
+| Layer      | Responsibility |
+| ---------- | -------------- |
+| Gateway    | 外部公開API        |
+| Service    | 制御             |
+| Channel    | 送信             |
+| Repository | 永続化            |
+| Message    | 状態管理           |
+
+通知基盤は業務ロジックを持ちません。
 
 ---
 
 ## Future Extension
 
 * SlackChannel 実装
-* Logger 抽象化
-* FAILED アーカイブ処理
+* Logger抽象化
+* FAILED管理拡張
 
 ---
 
 ## License
 
 MIT
-
-```
-```
-
