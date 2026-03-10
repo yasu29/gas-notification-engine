@@ -17,13 +17,33 @@ class LineChannel extends Channel {
    */
   send(message) {
 
+    // --------------------------------------------
+    // メッセージタイプ判定
+    // --------------------------------------------
+    let messages;
+
+    if (message.meta && message.meta.type === "image") {
+
+      // 画像メッセージ
+      messages = [{
+        type: "image",
+        originalContentUrl: message.body,
+        previewImageUrl: message.body
+      }];
+
+    } else {
+
+      // デフォルトはテキストメッセージ
+      messages = [{
+        type: "text",
+        text: message.body
+      }];
+    }
+
     // LINE API用のペイロード作成
     const payload = {
       to: message.to,
-      messages: [{
-        type: "text",
-        text: message.body
-      }]
+      messages: messages
     };
 
     // HTTPオプション設定

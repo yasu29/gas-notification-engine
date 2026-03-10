@@ -99,3 +99,37 @@ function notifyText(channel, target, text) {
   // -------------------------------------------------
   service.send(message);
 }
+
+/**
+ * 画像通知を送信する（公開インターフェース）
+ *
+ * @param {string} channel - 通知チャネル種別
+ * @param {string} target  - 送信先ID
+ * @param {string} imageUrl - 公開画像URL
+ *
+ * 使用例：
+ * notifyImage("LINE", Config.LINE_USER_ID, imageUrl);
+ */
+function notifyImage(channel, target, imageUrl) {
+
+  // -------------------------------------------------
+  // ① NotificationService を取得
+  // -------------------------------------------------
+  const service = createNotificationService();
+
+  // -------------------------------------------------
+  // ② Message オブジェクト生成
+  //    → meta.type に image を設定
+  // -------------------------------------------------
+  const message = new Message(channel, target, imageUrl);
+
+  // 画像タイプ指定（LINE側で分岐）
+  message.meta = {
+    type: "image"
+  };
+
+  // -------------------------------------------------
+  // ③ 通知送信実行
+  // -------------------------------------------------
+  service.send(message);
+}
